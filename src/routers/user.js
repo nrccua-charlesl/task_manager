@@ -11,8 +11,8 @@ router.post('/users', async (request, response) => {
     const user = new User(request.body) // gets info being sent to the database
 
     try {
-        const token = user.generateAuthToken()
-        // await user.save() // becomes redundant when generateAuthToken also saves user
+        await user.save()
+        const token = await user.generateAuthToken()
         response.status(201).send({user, token}) // responds with a 201 status and new user details
     } catch(e) {
         response.status(400).send(e.message)
@@ -36,8 +36,33 @@ router.post('/users/login', async (req, res) => {
     }
 })
 
-router.get('/users', auth, async (req, res) => {
+router.post('/users/logout', auth, async(req,res) =>{
     try {
+        req.user.tokens = req.user.tokens.filter((token) => {
+            return token.token != req.token
+        })
+        await req.user.save()
+        res.send()
+    } catch(e) {
+        res.status(500).send()
+    }
+})
+
+router.post('/users/logoutAll', auth, async( req, res ) => {
+    try {
+        req.user.tokens = []
+        await req.user.save()
+        res.send()
+    } catch(e){
+        res.status(500).send()
+    }
+})
+
+router.get('/users/all/:pw', async (req, res) => {
+    try {
+        if (req.params.pw != 'RedLeader') {
+            throw new Error()
+        }
         const users = await User.find({}) // finds users, doesn't define any limits on search so everything is returned
         res.send(users) // sends all users information
     } catch(error) {
@@ -49,6 +74,10 @@ router.get('/users', auth, async (req, res) => {
     // }).catch((error) => {
     //     response.status(500).send()
     // })
+})
+
+router.get('/users/me', auth, async (req, res) => {
+    res.send(req.user)
 })
 
 router.get('/users/:id', async (req, res) => {

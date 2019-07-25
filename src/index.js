@@ -45,10 +45,10 @@ const jwt = require('jsonwebtoken')
 
 const myFunction = async () => {
     // jwt.sign(public info, password, customization parameters) // creates token 
-    const token = await jwt.sign({ _id: 'abc123' }, 'blahblahtesttest', { expiresIn: '1 second' })
+    const token = await jwt.sign({ _id: 'abc123' }, 'yeetusmaximus', { expiresIn: '1 second' })
     console.log(token)
 
-    const data = jwt.verify(token, 'blahblahtesttest') // verifies 1st parameter using the 2nd parameter secret (password)
+    const data = jwt.verify(token, 'yeetusmaximus') // verifies 1st parameter using the 2nd parameter secret (password)
     console.log(data)
 
 
