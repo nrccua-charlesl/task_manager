@@ -2,6 +2,24 @@ const express = require('express')
 const User = require('../models/user')
 const auth = require('../middleware/auth')
 const router = new express.Router()
+const multer = require('multer')
+const sharp = require('sharp')
+const {sendWelcomeEmail, sendCancelEmail} = require('../emails/account')
+
+const upload = multer({
+    limits: {
+        fileSize: 1000000
+    },
+    fileFilter(req, file, cb) {
+        if (!file.originalname.match(/\.(jpg|jpeg|png)$/)) {
+            return cb(new Error('Please upload a picture'))
+        }
+
+        // cb(new Error('File must be a PDF'))
+        cb(undefined, true)
+        // cb(undefined, false)
+    }
+})
 
 router.get('/test', (req, res) => {
     res.send('from a new file')
@@ -12,6 +30,7 @@ router.post('/users', async (request, response) => {
 
     try {
         await user.save()
+        sendWelcomeEmail(user.email, user.name)
         const token = await user.generateAuthToken()
         response.status(201).send({user, token}) // responds with a 201 status and new user details
     } catch(e) {
@@ -58,6 +77,27 @@ router.post('/users/logoutAll', auth, async( req, res ) => {
     }
 })
 
+router.post('/users/me/avatar', auth, upload.single('avatar'), async(req, res) => {
+    const buffer = await sharp(req.file.buffer).resize({ width: 250, height: 250 }).png().toBuffer()
+
+    req.user.avatar = buffer  
+    await req.user.save()
+    res.send()
+}, (error, req, res, next) => {
+    res.status(400).send({ error: error.message })
+})
+
+// setup delete /users/me/avatar
+// add authentication
+// set the field to undefined and save the user sending back a 200
+// test work
+
+router.delete('/users/me/avatar', auth, async(req, res) => {
+    req.user.avatar = undefined
+    await req.user.save()
+    res.send()
+})
+
 router.get('/users/all/:pw', async (req, res) => {
     try {
         if (req.params.pw != 'RedLeader') {
@@ -80,32 +120,51 @@ router.get('/users/me', auth, async (req, res) => {
     res.send(req.user)
 })
 
-router.get('/users/:id', async (req, res) => {
-    const _id = req.params.id // sets inputted id as _id
-
+router.get('/users/:id/avatar', async (req, res) => {
     try {
-        const user = await User.findById(_id) // finds the user with the specific id
-        if (!user){
-            return res.status(404).send() // if no user has that id then 404 is returned (has to be of same length as normal id)
+        const user = await User.findById(req.params.id)
+        
+        if (!user || !user.avatar){
+            throw new Error()
         }
-        res.status(201).send(user) // returns user
-    } catch (error) {
-        res.status(400).send() // error handling
+        
+        res.set('Content-Type', 'image/jpg')
+        res.send(user.avatar)
+    } catch(error) {
+        res.status(404).send()
     }
-
-    // User.findById(_id).then((user) => {
-    //     if (!user){
-    //         return res.status(404).send()
-    //     }
-
-    //     res.send(user)
-    // }).catch((error) => {
-    //     res.status(500).send()
-    // })
-    // console.log(req.params)
 })
 
-router.patch('/users/:id', async (req, res) => {
+
+
+// router.get('/users/:id', async (req, res) => {
+//     const _id = req.params.id // sets inputted id as _id
+
+//     try {
+//         const user = await User.findById(_id) // finds the user with the specific id
+//         if (!user){
+//             return res.status(404).send() // if no user has that id then 404 is returned (has to be of same length as normal id)
+//         }
+//         res.status(201).send(user) // returns user
+//     } catch (error) {
+//         res.status(400).send() // error handling
+//     }
+
+//     // User.findById(_id).then((user) => {
+//     //     if (!user){
+//     //         return res.status(404).send()
+//     //     }
+
+//     //     res.send(user)
+//     // }).catch((error) => {
+//     //     res.status(500).send()
+//     // })
+//     // console.log(req.params)
+// })
+
+
+
+router.patch('/users/me', auth, async (req, res) => {
     const updates = Object.keys(req.body) // grabs inputted body for validation
     const allowedUpdates = ['name', 'email', 'password', 'age'] // list of parameters allowed
     const isValidOperation = updates.every((update) => allowedUpdates.includes(update)) // checks each update object to see if any have don't include valid parameters
@@ -115,29 +174,33 @@ router.patch('/users/:id', async (req, res) => {
     }
 
     try {
-        const user = await User.findById(req.params.id)
+        const user = req.user
         updates.forEach((update) => user[update] = req.body[update])
         await user.save()
 
         // const user = await User.findByIdAndUpdate(req.params.id, req.body, { new: true, runValidators: true }) // finds user and updates using update objects
 
-        if (!user) {
-            return res.status(404).send() // error handling, user not found
-        }
         res.send(user) // returns the updated user
     } catch (error){ 
         res.status(400).send(error) // error handling
     }
 })
 
-router.delete('/users/:id', async (req, res) => {
+router.delete('/users/me', auth, async (req, res) => {
+    // const email = req.user.email
+    // const name = req.user.name
+    // console.log(`email: ${email}\nname: ${name}`)
     try {
-        const user = await User.findByIdAndDelete(req.params.id) // finds user using id and deletes it
+        // commented out code redundant
+        // const user = await User.findByIdAndDelete(req.user._id) // finds user using id and deletes it
 
-        if(!user) {
-            return res.status(404).send() // error handling: user not found
-        }
-        res.send(user) // details of deleted user
+        // if(!user) {
+        //     return res.status(404).send() // error handling: user not found
+        // }
+
+        await req.user.remove()    
+        sendCancelEmail(req.user.email, req.user.name)
+        res.send(req.user) // details of deleted user
     } catch (error) {
         res.status(500).send() // error handling
     }
