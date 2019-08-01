@@ -37,7 +37,7 @@ const userSchema = new mongoose.Schema({
         trim: true,
         validate(value) {
             if (value.length < 6){
-                throw new Error('Password must be greater than 6 characters long')
+                throw new Error('Password must be greater than or equal to 6 characters long')
             }
             if (value.toLowerCase().includes('password')){ // will be true even if Password doesn't just have password in it
                 throw new Error('Password cannot contain "password"')
