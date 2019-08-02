@@ -52,12 +52,6 @@ router.get('/tasks', auth, async (req, res) => {
     } catch(error) {
         res.status(500).send()
     }
-
-    // Task.find({}).then((tasks) => {
-    //     res.send(tasks)
-    // }).catch((error) => {
-    //     res.status(500).send()
-    // })
 })
 
 router.get('/tasks/:id', auth, async (req, res) => {

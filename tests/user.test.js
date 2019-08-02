@@ -3,26 +3,9 @@ const jwt = require('jsonwebtoken')
 const mongoose = require('mongoose')
 const app = require('../src/app')
 const User = require('../src/models/user')
+const {userOne, userOneId, setupDatabase} = require('./fixtures/db')
 
-const userOneId = new mongoose.Types.ObjectId() // separate from userOne because it's used in different places
-const userOne = {
-    _id: userOneId,
-    name: 'Mike',
-    email: 'mike@example.com',
-    password: 'mikeiscool247',
-    tokens: [{
-        token: jwt.sign({ _id: userOneId }, process.env.JWT_SECRET) // Set up for authentication
-    }]
-}
-
-beforeEach(async() => {
-    await User.deleteMany()
-    await new User(userOne).save()
-})
-
-// afterEach(() => {
-//     console.log('afterEach')
-// })
+beforeEach(setupDatabase)
 
 test('Should sign up new user', async () => {
     const response = await request(app)
@@ -98,19 +81,151 @@ test('Should delete account for user', async() => {
     expect(user).toBeNull()
 })
 
-// validate the user was deleted
-//
-// fetch the user from the database
-// assert null response (use assesrtion from signup test)
-// test your work
-
-// // Assert that the database was changed correctly
-// const user = await User.findById(response.body.user._id)
-// expect(user).not.toBeNull()
-
 test('Should not delete account for unauthenticated user', async() => {
     await request(app)
         .delete('/users/me')
         .send()
         .expect(401)
 })
+
+test('Should upload avatar image', async() => {
+    await request(app)
+        .post('/users/me/avatar')
+        .set('Authorization', `Bearer ${userOne.tokens[0].token}`)
+        .attach('avatar', 'tests/fixtures/profile-pic.jpg')
+        .expect(200)
+
+    const user = await User.findById(userOneId)
+    expect(user.avatar).toEqual(expect.any(Buffer)) // objects aren't equal even with the same properties because they are still distinct from one another
+})
+
+// test user updates
+//
+// create "should update valid user fields"
+//  - update the name of the test user
+//  - check the data to confirm it's changed
+// create "should not update invalid user fields"
+//  - update a location" filed and expect error status code
+// test work
+
+test('Should update valid user fields', async() => {
+    await request(app)
+        .patch('/users/me')
+        .set('Authorization', `Bearer ${userOne.tokens[0].token}`)
+        .send({
+            name: 'New Mike'
+        })
+        .expect(200)
+
+    const user = await User.findById(userOneId)
+    expect(user.name).not.toEqual(userOne.name)
+})
+
+test('Should not update invalid user fields', async() => {
+    await request(app)
+        .patch('/users/me')
+        .set('Authorization', `Bearer ${userOne.tokens[0].token}`)
+        .send({
+            tokens: { token: 'awegawhpaphabaerph' } // tokens should not be malleable
+        })
+        .expect(400)
+
+    const user = await User.findById(userOneId)
+    expect(user.tokens[0].token).toEqual(userOne.tokens[0].token)
+})
+
+test('Should not signup user with invalid name', async() => {
+    await request(app)
+        .post('/users')
+        .send({
+            name: '',
+            email: 'yeetus@example.net',
+            password: 'testpw'
+        })
+        .expect(400)
+})
+
+test('Should not signup user with invalid email', async() => {
+    await request(app)
+        .post('/users')
+        .send({
+            name: 'gerald',
+            email: 'le.net',
+            password: 'testpw'
+        })
+        .expect(400)
+})
+
+test('Should not signup user with invalid password', async() => {
+    await request(app)
+        .post('/users')
+        .send({
+            name: 'gerald',
+            email: 'yeetus@example.net',
+            password: 'password'
+        })
+        .expect(400)
+})
+
+test('Should not update user if unauthenticated', async() => {
+    await request(app)
+        .patch('/users/me')
+        .send({ 
+            name: 'michael'
+        })
+        .expect(401)
+})
+
+test('Should not update invalid name', async() => {
+    await request(app)
+        .patch('/users/me')
+        .set('Authorization', `Bearer ${userOne.tokens[0].token}`)
+        .send({
+            name: ''
+        })
+        .expect(400)
+
+    const user = await User.findById(userOneId)
+    expect(user.tokens[0].token).toEqual(userOne.tokens[0].token)
+})
+
+test('Should not update invalid email', async() => {
+    await request(app)
+        .patch('/users/me')
+        .set('Authorization', `Bearer ${userOne.tokens[0].token}`)
+        .send({
+            email: 'yeetus.gaba'
+        })
+        .expect(400)
+
+    const user = await User.findById(userOneId)
+    expect(user.tokens[0].token).toEqual(userOne.tokens[0].token)
+})
+
+test('Should not update invalid password', async() => {
+    await request(app)
+        .patch('/users/me')
+        .set('Authorization', `Bearer ${userOne.tokens[0].token}`)
+        .send({
+            password: 'password'
+        })
+        .expect(400)
+
+    const user = await User.findById(userOneId)
+    expect(user.tokens[0].token).toEqual(userOne.tokens[0].token)
+})
+
+test('Should not delete user if unauthenticated', async() => {
+    await request(app)
+        .patch('/users/me')
+        .send()
+        .expect(401) // auth catches error before 500 error is caught
+})
+
+//
+// User Test Ideas
+//
+// Should not signup user with invalid name/email/password
+// Should not update user if unauthenticated
+// Should not update user with invalid name/email/password
+// Should not delete user if unauthenticated
